@@ -1,0 +1,24 @@
+{
+  "name": "projeto12-batepapo-uol-api",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Projeto 12 - Back-end - Batepapo-UOL",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "batepapo-Uol-api",
+    "driven",
+    "projeto",
+    "12"
+  ],
+  "author": "Wanessa-Guedes",
+  "license": "ISC",
+  "dependencies": {
+    "chalk": "^5.0.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.0",
+    "joi": "^17.6.0"
+  }
+}

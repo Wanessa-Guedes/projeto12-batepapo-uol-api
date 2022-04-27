@@ -1,0 +1,5 @@
+# patchs to ignore in gitHub
+/Front-end
+
+
+node_modules/
