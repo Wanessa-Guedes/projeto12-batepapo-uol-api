@@ -3,7 +3,8 @@ import chalk from "chalk";
 import cors from "cors";
 import Joi from "joi";
 import dayjs from "dayjs";
-import res, { get } from "express/lib/response";
+import { MongoClient } from "mongodb";
+import dotenv from "dotenv";
 
 const app = express();
 app.use(json());
@@ -11,39 +12,62 @@ app.use(cors());
 
 const PORTA = 5000;
 
+dotenv.config();
+
 //Pensando nas variáveis de forma local
 
 const participants = [];
-const message = [];
+
+// Conectando no banco de dados
+const mongoClient = new MongoClient(process.env.MONGO_URI);
 
 //post participants
-app.post("/participants", (req, res) => {
+app.post("/participants", async (req, res) => {
     // name pelo body da request
     //console.log(schema.validate(req.body)); --. { value: { name: 'teste' } }
-    // Validação Joi
-    const schema = Joi.object({
-        name: Joi.string()
-        .required(),
-    })
     
-    const { error, value } = schema.validate(req.body);
-    if(error){
-        res.sendStatus(422);
-        return;
-    }
-    const infosParticipant = {
-        name: value.name,
-        lastStatys: Date.now()
-    };
-    message.push({from:value.name,
-        to: 'Todos', 
-        text: 'entra na sala...', 
-        type: 'status', 
-        time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
-    });
+    try {
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const usersCollection = dbBatePapo.collection("participants");
 
-    participants.push(infosParticipant)
-    res.sendStatus(201);
+            // Validação Joi
+        const schema = Joi.object({
+            name: Joi.string()
+            .required(),
+        })
+
+		const { error, value } = schema.validate(req.body);
+        
+        if(error){
+            res.sendStatus(422);
+            //mongoClient.close();
+            return;
+        } else if(await usersCollection.findOne({name: value.name})){
+            res.sendStatus(409);
+            //mongoClient.close();
+            return;
+        }
+
+        const infosParticipant = {
+            name: value.name,
+            lastStatys: Date.now()
+        };
+        const message = ({from:value.name,
+            to: 'Todos', 
+            text: 'entra na sala...', 
+            type: 'status', 
+            time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
+        });
+
+        const userOn = await usersCollection.insertOne(infosParticipant);
+        const messageEnter = dbBatePapo.collection("messageEnter");
+        const insertMessageEnter = messageEnter.insertOne(message);
+        res.sendStatus(201);
+        //mongoClient.close();
+    } catch(e){
+        console.log(chalk.bold.red("Erro ao entrar na sala"), e);
+    }
 })
 
 // get participantes -- Retornar a lista de todos os participantes
