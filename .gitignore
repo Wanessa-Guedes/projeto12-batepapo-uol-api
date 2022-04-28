@@ -4,4 +4,4 @@
 
 node_modules/
 
-./Back-end/.env
+/Back-end/.env
