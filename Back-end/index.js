@@ -14,10 +14,6 @@ const PORTA = 5000;
 
 dotenv.config();
 
-//Pensando nas variáveis de forma local
-
-const participants = [];
-
 // Conectando no banco de dados
 const mongoClient = new MongoClient(process.env.MONGO_URI);
 
@@ -31,7 +27,7 @@ app.post("/participants", async (req, res) => {
         const dbBatePapo = mongoClient.db("batepapouol")
         const usersCollection = dbBatePapo.collection("participants");
 
-            // Validação Joi
+        // Validação Joi
         const schema = Joi.object({
             name: Joi.string()
             .required(),
@@ -71,8 +67,18 @@ app.post("/participants", async (req, res) => {
 })
 
 // get participantes -- Retornar a lista de todos os participantes
-app.get("/participants", (req, res) =>{
-    res.send(participants)
+app.get("/participants", async (req, res) =>{
+
+    try{
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const usersCollection = dbBatePapo.collection("participants");
+        const participants = await usersCollection.find().toArray();
+        console.log(participants);
+        res.send(participants)
+    } catch(e){
+        console.log(chalk.bold.red("Erro ao carregar os participantes"), e);
+    }
 });
 
 // post messages
