@@ -82,23 +82,94 @@ app.get("/participants", async (req, res) =>{
 });
 
 // post messages
-app.post("/messages", (req, res) =>{
-    // Validação Joi
-    const schema = Joi.object({
-        to: Joi.string()
-        .required(),
+app.post("/messages", async (req, res) =>{
 
-        text: Joi.string()
-        .required(),
+    try {
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const messagesCollection = dbBatePapo.collection("messages");
+        
+        // Validação Joi
+        const schema = Joi.object({
+            to: Joi.string()
+            .required(),
 
-        type: Joi.any()
-        .valid('message', 'private_message')
-        .required()
-    })
+            text: Joi.string()
+            .required(),
 
-    const { error, value } = schema.validate(req.body);
-    const { user } = req.headers;
+            type: Joi.any()
+            .valid('message', 'private_message')
+            .required()
+        });
+
+        const { error, value } = schema.validate(req.body);
+        const { user } = req.headers;
+
+        if(error){
+            res.sendStatus(422);
+            //mongoClient.close();
+        }
+
+        const message = ({
+            from: user,
+            to: value.to, 
+            text: value.text, 
+            type: value.type, 
+            time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
+        });
+
+        const sendMessage = await messagesCollection.insertOne(message);
+        res.sendStatus(201);
+        //mongoClient.close();
+
+    } catch(e){
+        console.log(chalk.bold.red("Erro ao enviar mensagem"), e);
+        //mongoClient.close();
+    }
 })
+
+// get - messages -- Retornar as mensagens
+app.get("/messages", async (req, res) => {
+
+    try {
+
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const messagesCollection = dbBatePapo.collection("messages");
+        const  limit  = parseInt(req.query.limit);
+        const { user } = req.header;
+        // mensagens || do tipo status || do tipo message & mensagem do tipo private_message || de: user || para: user
+        const messages = await messagesCollection.find({
+            $or: [
+                {type: "status"},
+                {type: "message"},
+                {
+                    $and: [
+                        {type: "private_message"},
+                        {
+                            $or: [
+                                {from: user},
+                                {to:user}
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }).toArray();
+
+        if(limit){
+            res.send(messages.slice(-limit));
+            //mongoClient.close();
+            return;
+        } 
+        res.send(messages);
+        
+    } catch(e) {
+        console.log(chalk.bold.red("Erro ao exibir mensagens"), e);
+        //mongoClient.close();
+    }
+})
+
 
 // subindo back-end
 app.listen(PORTA, () => {
