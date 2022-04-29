@@ -193,7 +193,7 @@ app.post("/status", async (req,res) =>{
     }
 })
 
-// delete
+// delete user message
 app.delete("/messages/:id", async (req, res) => {
 
     try {
@@ -227,6 +227,73 @@ app.delete("/messages/:id", async (req, res) => {
     }
 })
 
+// Put - atualização de mensagem
+app.put("/messages/:id", async (req, res) => {
+
+    try {
+
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const messagesCollection = dbBatePapo.collection("messages");
+        const participantsCollection = dbBatePapo.collection("participants");
+        const { id } = req.params;
+
+        // Validação Joi
+        const schema = Joi.object({
+            to: Joi.string()
+            .required(),
+
+            text: Joi.string()
+            .required(),
+
+            type: Joi.any()
+            .valid('message', 'private_message')
+            .required()
+        });
+
+        const { error, value } = schema.validate(req.body);
+        const { user } = req.headers;
+        console.log(user)
+
+        if(error){
+            res.sendStatus(422);
+            console.log("erro na validação")
+            return;
+        }
+
+        const participantExist = await participantsCollection.findOne({name: user});
+
+        if(!participantExist){
+            res.sendStatus(422);
+            console.log("erro no participantes inexistente")
+            return;
+        }
+
+        const messageExist = await messagesCollection.findOne({_id: new ObjectId(id)});
+        const ownerMessage = await messagesCollection.findOne({$and:[{from: user}, {_id: new ObjectId(id)}]});
+        
+        if(!messageExist){
+            res.sendStatus(404);
+            console.log("erro mensagem inexistente")
+            return;
+        } 
+
+        if(!ownerMessage){
+            res.sendStatus(401);
+            console.log("erro no participantes não é o dono da mensagem")
+            return;
+        }
+
+        await messagesCollection.updateOne({_id: new ObjectId(id)}, {$set: {to: value.to, text: value.text, type: value.type}});
+        res.sendStatus(202);
+        
+
+    } catch(e) {
+
+        console.log(chalk.bold.red("Erro ao atualizar mensagem"), e);
+        //mongoClient.close();
+    }
+})
 
 //Remoção automática de usuários inativos
 setInterval(async () => {
