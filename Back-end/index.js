@@ -57,7 +57,7 @@ app.post("/participants", async (req, res) => {
         });
 
         await usersCollection.insertOne(infosParticipant);
-        const messageEnter = dbBatePapo.collection("messageEnter");
+        const messageEnter = dbBatePapo.collection("messages");
         await messageEnter.insertOne(message);
         res.sendStatus(201);
         //mongoClient.close();
@@ -74,7 +74,6 @@ app.get("/participants", async (req, res) =>{
         const dbBatePapo = mongoClient.db("batepapouol")
         const usersCollection = dbBatePapo.collection("participants");
         const participants = await usersCollection.find().toArray();
-        console.log(participants);
         res.send(participants)
     } catch(e){
         console.log(chalk.bold.red("Erro ao carregar os participantes"), e);
@@ -118,7 +117,7 @@ app.post("/messages", async (req, res) =>{
             time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
         });
 
-        const sendMessage = await messagesCollection.insertOne(message);
+        await messagesCollection.insertOne(message);
         res.sendStatus(201);
         //mongoClient.close();
 
@@ -143,13 +142,15 @@ app.get("/messages", async (req, res) => {
             $or: [
                 {type: "status"},
                 {type: "message"},
-                {type: "private_message"},
+                {$and: [
+                    {type: "private_message"},
                         {
                             $or: [
                                 {from: user},
                                 {to:user}
                             ]
                         }
+                    ]}
             ]
         }).toArray();
 
@@ -175,7 +176,8 @@ app.post("/status", async (req,res) =>{
         await mongoClient.connect();
         const dbBatePapo = mongoClient.db("batepapouol")
         const participantsCollection = dbBatePapo.collection("participants");
-        const checkStatus = await participantsCollection.findOne({name: user}).toArray();
+        // findOne tava dando erro com o .toArray()
+        const checkStatus = await participantsCollection.findOne({name: user});
 
         if(!checkStatus){
             res.sendStatus(404);
@@ -190,6 +192,40 @@ app.post("/status", async (req,res) =>{
         //mongoClient.close();
     }
 })
+
+//Remoção automática de usuários inativos
+setInterval(async () => {
+    
+    try{
+        const time = Date.now();
+        const statusRemove = time - 10000;
+
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const participantsCollection = dbBatePapo.collection("participants");
+        const messagesCollection = dbBatePapo.collection("messages");
+        //$lt --> menor que
+        const removeParticipants = await participantsCollection.find({lastStatus: {$lt:statusRemove}}).toArray();
+
+        if(removeParticipants){
+            const participantsDeleted = await participantsCollection.deleteMany({lastStatus: {$lt:statusRemove}});
+            // tem que colocar async em toda chamada com await
+            removeParticipants.map(async removedParticipant => {
+                let message = ({from: removedParticipant.name, 
+                                to: 'Todos', 
+                                text: 'sai da sala...',     
+                                type: 'status', 
+                                time: `${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`});
+                
+                await messagesCollection.insertOne(message);
+            });
+        }
+
+    } catch(e) {
+        console.log(chalk.bold.red("Erro na remoção por invatividade"), e);
+        //mongoClient.close();
+    }
+}, 15000);
 
 // subindo back-end
 app.listen(PORTA, () => {
