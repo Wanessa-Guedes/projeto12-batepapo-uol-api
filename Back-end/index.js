@@ -3,7 +3,7 @@ import chalk from "chalk";
 import cors from "cors";
 import Joi from "joi";
 import dayjs from "dayjs";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
 
 const app = express();
@@ -192,6 +192,41 @@ app.post("/status", async (req,res) =>{
         //mongoClient.close();
     }
 })
+
+// delete
+app.delete("/messages/:id", async (req, res) => {
+
+    try {
+
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const messagesCollection = dbBatePapo.collection("messages");
+        const { user } = req.headers;
+        const { id } = req.params;
+        const messageExist = await messagesCollection.findOne({_id: new ObjectId(id)});
+        const ownerMessage = await messagesCollection.findOne({$and:[{from: user}, {_id: new ObjectId(id)}]});
+        
+        if(!messageExist){
+            res.sendStatus(404);
+            return;
+        } 
+
+        if(!ownerMessage){
+            res.sendStatus(401);
+            return;
+        }
+
+        await messagesCollection.deleteOne({_id: new ObjectId(id)});
+        res.sendStatus(202);
+        
+
+    } catch(e) {
+
+        console.log(chalk.bold.red("Erro ao excluir mensagem"), e);
+        //mongoClient.close();
+    }
+})
+
 
 //Remoção automática de usuários inativos
 setInterval(async () => {
