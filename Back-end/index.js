@@ -47,7 +47,7 @@ app.post("/participants", async (req, res) => {
 
         const infosParticipant = {
             name: value.name,
-            lastStatys: Date.now()
+            lastStatus: Date.now()
         };
         const message = ({from:value.name,
             to: 'Todos', 
@@ -56,9 +56,9 @@ app.post("/participants", async (req, res) => {
             time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
         });
 
-        const userOn = await usersCollection.insertOne(infosParticipant);
+        await usersCollection.insertOne(infosParticipant);
         const messageEnter = dbBatePapo.collection("messageEnter");
-        const insertMessageEnter = messageEnter.insertOne(message);
+        await messageEnter.insertOne(message);
         res.sendStatus(201);
         //mongoClient.close();
     } catch(e){
@@ -137,23 +137,19 @@ app.get("/messages", async (req, res) => {
         const dbBatePapo = mongoClient.db("batepapouol")
         const messagesCollection = dbBatePapo.collection("messages");
         const  limit  = parseInt(req.query.limit);
-        const { user } = req.header;
+        const { user } = req.headers;
         // mensagens || do tipo status || do tipo message & mensagem do tipo private_message || de: user || para: user
         const messages = await messagesCollection.find({
             $or: [
                 {type: "status"},
                 {type: "message"},
-                {
-                    $and: [
-                        {type: "private_message"},
+                {type: "private_message"},
                         {
                             $or: [
                                 {from: user},
                                 {to:user}
                             ]
                         }
-                    ]
-                }
             ]
         }).toArray();
 
@@ -170,6 +166,30 @@ app.get("/messages", async (req, res) => {
     }
 })
 
+// post - status
+app.post("/status", async (req,res) =>{
+
+    try {
+
+        const { user } = req.headers;
+        await mongoClient.connect();
+        const dbBatePapo = mongoClient.db("batepapouol")
+        const participantsCollection = dbBatePapo.collection("participants");
+        const checkStatus = await participantsCollection.findOne({name: user}).toArray();
+
+        if(!checkStatus){
+            res.sendStatus(404);
+            //mongoClient.close();
+            return;
+        }
+        await participantsCollection.updateOne({name: user}, {$set: {lastStatus: Date.now()}});
+        res.sendStatus(200);
+
+    }  catch(e) {
+        console.log(chalk.bold.red("Erro ao atualizar status do usuário"), e);
+        //mongoClient.close();
+    }
+})
 
 // subindo back-end
 app.listen(PORTA, () => {
