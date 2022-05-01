@@ -5,6 +5,7 @@ import Joi from "joi";
 import dayjs from "dayjs";
 import { MongoClient, ObjectId } from "mongodb";
 import dotenv from "dotenv";
+import { stripHtml } from "string-strip-html";
 
 const app = express();
 app.use(json());
@@ -15,38 +16,46 @@ const PORTA = 5000;
 dotenv.config();
 
 // Conectando no banco de dados
+let dbBatePapo = null;
 const mongoClient = new MongoClient(process.env.MONGO_URI);
+const promise = mongoClient.connect();
+promise.then (() => {
+    dbBatePapo = mongoClient.db("batepapouol");
+});
+promise.catch(e => console.log(chalk.bold.red("Erro ao se conectar ao banco de dados"), e));
 
 //post participants
 app.post("/participants", async (req, res) => {
     // name pelo body da request
     //console.log(schema.validate(req.body)); --. { value: { name: 'teste' } }
-    
-    try {
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
-        const usersCollection = dbBatePapo.collection("participants");
-
         // Validação Joi
         const schema = Joi.object({
             name: Joi.string()
             .required(),
         })
 
-		const { error, value } = schema.validate(req.body);
+		const { error, value } = schema.validate(req.body, {abortEarly: false});
         
         if(error){
-            res.sendStatus(422);
+            res.status(422).send(error.details.map(detail => detail.message));
             //mongoClient.close();
             return;
-        } else if(await usersCollection.findOne({name: value.name})){
+        }
+    
+    try {
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
+        const usersCollection = dbBatePapo.collection("participants");
+        let nameSanitizado = stripHtml(value.name).result.trim();
+        const isThereUser = await usersCollection.findOne({name: nameSanitizado})
+        if(isThereUser){
             res.sendStatus(409);
             //mongoClient.close();
             return;
         }
 
         const infosParticipant = {
-            name: value.name,
+            name: nameSanitizado,
             lastStatus: Date.now()
         };
         const message = ({from:value.name,
@@ -62,7 +71,7 @@ app.post("/participants", async (req, res) => {
         res.sendStatus(201);
         //mongoClient.close();
     } catch(e){
-        console.log(chalk.bold.red("Erro ao entrar na sala"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao entrar na sala"), e));
     }
 })
 
@@ -70,24 +79,19 @@ app.post("/participants", async (req, res) => {
 app.get("/participants", async (req, res) =>{
 
     try{
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
         const usersCollection = dbBatePapo.collection("participants");
         const participants = await usersCollection.find().toArray();
         res.send(participants)
     } catch(e){
-        console.log(chalk.bold.red("Erro ao carregar os participantes"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao retornar lista de participantes"), e));
     }
 });
 
 // post messages
 app.post("/messages", async (req, res) =>{
-
-    try {
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
-        const messagesCollection = dbBatePapo.collection("messages");
-        
+            
         // Validação Joi
         const schema = Joi.object({
             to: Joi.string()
@@ -101,18 +105,31 @@ app.post("/messages", async (req, res) =>{
             .required()
         });
 
-        const { error, value } = schema.validate(req.body);
-        const { user } = req.headers;
+        const { error, value } = schema.validate(req.body, {abortEarly: false});
 
         if(error){
-            res.sendStatus(422);
+            res.status(422).send(error.details.map(detail => detail.message));
+            return;
             //mongoClient.close();
+        }
+
+    try {
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
+        const messagesCollection = dbBatePapo.collection("messages");
+        const { user } = req.headers;
+        const participantsCollection = dbBatePapo.collection("participants");
+        const isUserValid = await participantsCollection.findOne({name: user});
+
+        if(!isUserValid){
+            res.status(422).send(console.log(chalk.bold.red("Usuário inválido")));
+            return;
         }
 
         const message = ({
             from: user,
             to: value.to, 
-            text: value.text, 
+            text: stripHtml(value.text).result.trim(), 
             type: value.type, 
             time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
         });
@@ -122,7 +139,7 @@ app.post("/messages", async (req, res) =>{
         //mongoClient.close();
 
     } catch(e){
-        console.log(chalk.bold.red("Erro ao enviar mensagem"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao enviar mensagem"), e));
         //mongoClient.close();
     }
 })
@@ -132,8 +149,8 @@ app.get("/messages", async (req, res) => {
 
     try {
 
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
         const messagesCollection = dbBatePapo.collection("messages");
         const  limit  = parseInt(req.query.limit);
         const { user } = req.headers;
@@ -162,7 +179,7 @@ app.get("/messages", async (req, res) => {
         res.send(messages);
         
     } catch(e) {
-        console.log(chalk.bold.red("Erro ao exibir mensagens"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao receber mensagem"), e));
         //mongoClient.close();
     }
 })
@@ -173,8 +190,8 @@ app.post("/status", async (req,res) =>{
     try {
 
         const { user } = req.headers;
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
         const participantsCollection = dbBatePapo.collection("participants");
         // findOne tava dando erro com o .toArray()
         const checkStatus = await participantsCollection.findOne({name: user});
@@ -188,7 +205,7 @@ app.post("/status", async (req,res) =>{
         res.sendStatus(200);
 
     }  catch(e) {
-        console.log(chalk.bold.red("Erro ao atualizar status do usuário"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao atualizar status"), e));
         //mongoClient.close();
     }
 })
@@ -198,8 +215,8 @@ app.delete("/messages/:id", async (req, res) => {
 
     try {
 
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
         const messagesCollection = dbBatePapo.collection("messages");
         const { user } = req.headers;
         const { id } = req.params;
@@ -221,22 +238,13 @@ app.delete("/messages/:id", async (req, res) => {
         
 
     } catch(e) {
-
-        console.log(chalk.bold.red("Erro ao excluir mensagem"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao deletar mensagem"), e));
         //mongoClient.close();
     }
 })
 
 // Put - atualização de mensagem
 app.put("/messages/:id", async (req, res) => {
-
-    try {
-
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
-        const messagesCollection = dbBatePapo.collection("messages");
-        const participantsCollection = dbBatePapo.collection("participants");
-        const { id } = req.params;
 
         // Validação Joi
         const schema = Joi.object({
@@ -251,15 +259,22 @@ app.put("/messages/:id", async (req, res) => {
             .required()
         });
 
-        const { error, value } = schema.validate(req.body);
-        const { user } = req.headers;
-        console.log(user)
-
+        const { error, value } = schema.validate(req.body, {abortEarly: false});
+        
         if(error){
-            res.sendStatus(422);
-            console.log("erro na validação")
+            res.status(422).send(error.details.map(detail => detail.message));
             return;
         }
+
+    try {
+
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
+        const messagesCollection = dbBatePapo.collection("messages");
+        const participantsCollection = dbBatePapo.collection("participants");
+        const { id } = req.params;
+        const { user } = req.headers;
+        //console.log(user)
 
         const participantExist = await participantsCollection.findOne({name: user});
 
@@ -274,23 +289,22 @@ app.put("/messages/:id", async (req, res) => {
         
         if(!messageExist){
             res.sendStatus(404);
-            console.log("erro mensagem inexistente")
+            console.log("Erro! Mensagem inexistente")
             return;
         } 
 
         if(!ownerMessage){
             res.sendStatus(401);
-            console.log("erro no participantes não é o dono da mensagem")
+            console.log("Erro! Participante não é o dono da mensagem")
             return;
         }
 
-        await messagesCollection.updateOne({_id: new ObjectId(id)}, {$set: {to: value.to, text: value.text, type: value.type}});
+        await messagesCollection.updateOne({_id: new ObjectId(id)}, {$set: {to: value.to, text: stripHtml(value.text).result.trim(), type: value.type}});
         res.sendStatus(202);
         
 
     } catch(e) {
-
-        console.log(chalk.bold.red("Erro ao atualizar mensagem"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro ao atualizar mensagem"), e));
         //mongoClient.close();
     }
 })
@@ -302,15 +316,15 @@ setInterval(async () => {
         const time = Date.now();
         const statusRemove = time - 10000;
 
-        await mongoClient.connect();
-        const dbBatePapo = mongoClient.db("batepapouol")
+        //await mongoClient.connect();
+        //const dbBatePapo = mongoClient.db("batepapouol")
         const participantsCollection = dbBatePapo.collection("participants");
         const messagesCollection = dbBatePapo.collection("messages");
         //$lt --> menor que
-        const removeParticipants = await participantsCollection.find({lastStatus: {$lt:statusRemove}}).toArray();
+        const removeParticipants = await participantsCollection.find({lastStatus: {$lte:statusRemove}}).toArray();
 
         if(removeParticipants){
-            const participantsDeleted = await participantsCollection.deleteMany({lastStatus: {$lt:statusRemove}});
+            const participantsDeleted = await participantsCollection.deleteMany({lastStatus: {$lte:statusRemove}});
             // tem que colocar async em toda chamada com await
             removeParticipants.map(async removedParticipant => {
                 let message = ({from: removedParticipant.name, 
@@ -324,12 +338,12 @@ setInterval(async () => {
         }
 
     } catch(e) {
-        console.log(chalk.bold.red("Erro na remoção por invatividade"), e);
+        res.status(500).send(console.log(chalk.bold.red("Erro na remoção automática de usuário inativo"), e));
         //mongoClient.close();
     }
-}, 15000);
+}, 150000);
 
 // subindo back-end
 app.listen(PORTA, () => {
     console.log(chalk.bold.green(`Back-end on na porta ${PORTA}`))
-})
+});
