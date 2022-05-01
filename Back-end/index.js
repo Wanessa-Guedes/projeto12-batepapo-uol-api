@@ -341,7 +341,7 @@ setInterval(async () => {
         res.status(500).send(console.log(chalk.bold.red("Erro na remoção automática de usuário inativo"), e));
         //mongoClient.close();
     }
-}, 150000);
+}, 15000);
 
 // subindo back-end
 app.listen(PORTA, () => {
