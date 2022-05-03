@@ -11,8 +11,6 @@ const app = express();
 app.use(json());
 app.use(cors());
 
-const PORTA = 5000;
-
 dotenv.config();
 
 // Conectando no banco de dados
@@ -26,8 +24,7 @@ promise.catch(e => console.log(chalk.bold.red("Erro ao se conectar ao banco de d
 
 //post participants
 app.post("/participants", async (req, res) => {
-    // name pelo body da request
-    //console.log(schema.validate(req.body)); --. { value: { name: 'teste' } }
+
         // Validação Joi
         const schema = Joi.object({
             name: Joi.string()
@@ -54,6 +51,8 @@ app.post("/participants", async (req, res) => {
             return;
         }
 
+        const timeMessage = dayjs().format("HH:mm:ss");
+
         const infosParticipant = {
             name: nameSanitizado,
             lastStatus: Date.now()
@@ -62,7 +61,7 @@ app.post("/participants", async (req, res) => {
             to: 'Todos', 
             text: 'entra na sala...', 
             type: 'status', 
-            time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
+            time: timeMessage
         });
 
         await usersCollection.insertOne(infosParticipant);
@@ -126,12 +125,14 @@ app.post("/messages", async (req, res) =>{
             return;
         }
 
+        const timeMessage = dayjs().format("HH:mm:ss");
+
         const message = ({
             from: user,
             to: value.to, 
             text: stripHtml(value.text).result.trim(), 
             type: value.type, 
-            time:`${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`
+            time: timeMessage
         });
 
         await messagesCollection.insertOne(message);
@@ -315,7 +316,7 @@ setInterval(async () => {
     try{
         const time = Date.now();
         const statusRemove = time - 10000;
-
+        const timeMessage = dayjs().format("HH:mm:ss");
         //await mongoClient.connect();
         //const dbBatePapo = mongoClient.db("batepapouol")
         const participantsCollection = dbBatePapo.collection("participants");
@@ -331,19 +332,21 @@ setInterval(async () => {
                                 to: 'Todos', 
                                 text: 'sai da sala...',     
                                 type: 'status', 
-                                time: `${dayjs().hour()}:${dayjs().minute()}:${dayjs().second()}`});
+                                time: timeMessage});
                 
                 await messagesCollection.insertOne(message);
             });
         }
 
     } catch(e) {
-        res.status(500).send(console.log(chalk.bold.red("Erro na remoção automática de usuário inativo"), e));
+        console.log(chalk.bold.red("Erro na remoção automática de usuário inativo"), e);
+        return;
         //mongoClient.close();
     }
 }, 15000);
 
 // subindo back-end
+const PORTA = 5000;
 app.listen(PORTA, () => {
     console.log(chalk.bold.green(`Back-end on na porta ${PORTA}`))
 });
