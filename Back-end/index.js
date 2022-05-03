@@ -57,7 +57,7 @@ app.post("/participants", async (req, res) => {
             name: nameSanitizado,
             lastStatus: Date.now()
         };
-        const message = ({from:value.name,
+        const message = ({from: nameSanitizado,
             to: 'Todos', 
             text: 'entra na sala...', 
             type: 'status', 
